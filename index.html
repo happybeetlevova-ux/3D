@@ -179,6 +179,23 @@ textarea.inp{min-height:100px;font:12px/1.4 var(--f-num)}
 .savebar{position:fixed;left:0;right:0;bottom:calc(var(--tabs-h) + env(safe-area-inset-bottom,0px));z-index:6;padding:10px max(16px,env(safe-area-inset-right,0px)) 10px max(16px,env(safe-area-inset-left,0px));background:var(--surface);border-top:1px solid var(--line)}
 .savebar .in{max-width:728px;margin:0 auto;display:flex;gap:8px;align-items:center}
 .savebar .in span{flex:1;font-size:13px;color:var(--muted)}
+.wbbar{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:10px 12px}
+.wbbar>div{min-width:0;display:flex;flex-direction:column;gap:2px;font-size:13px}
+.wbbar b{font-weight:600}
+.wbbar small{color:var(--muted);font-size:12px}
+.subjbtn{display:flex;justify-content:space-between;align-items:center;gap:10px;width:100%;text-align:left;border:1px dashed var(--line);background:var(--bg);border-radius:12px;padding:10px 12px}
+.subjbtn.set{border-style:solid}
+.subjbtn span{min-width:0;display:flex;flex-direction:column;gap:2px}
+.subjbtn small{color:var(--muted);font-size:12px}
+.subjlist{display:flex;flex-direction:column;max-height:55vh;overflow:auto;border:1px solid var(--line);border-radius:12px}
+.subjlist button{display:flex;justify-content:space-between;gap:10px;align-items:center;text-align:left;border:0;border-bottom:1px solid var(--line);background:var(--surface);padding:10px 12px}
+.subjlist button:last-child{border-bottom:0}
+.subjlist button span{min-width:0;display:flex;flex-direction:column}
+.subjlist small{color:var(--muted);font-size:12px}
+.subjlist b.pc{font:700 15px var(--f-num);white-space:nowrap}
+.chg{display:flex;flex-direction:column;gap:4px;padding:10px 0;border-bottom:1px solid var(--line)}
+.chg:last-child{border-bottom:0}
+.chg b{font-weight:600}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(var(--tabs-h) + 86px + env(safe-area-inset-bottom,0px));z-index:30;background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:12px;font-weight:600;font-size:14px;max-width:calc(100% - 32px);box-shadow:var(--shadow)}
 </style>
 </head><body>
@@ -224,7 +241,9 @@ function parseTime(s){
 /* ================= данные и перенос ================= */
 function valid(d){return d&&d.v===2&&Array.isArray(d.products)&&Array.isArray(d.plastics)&&Array.isArray(d.parts)}
 function normName(s){return String(s||"").toLowerCase().replace(/ё/g,"е").replace(/\s+/g," ").trim()}
-function newProduct(o){return Object.assign({id:uid(),name:"",sku:"",qty:0,min:0,h:0,rec:{pl:[],pt:[]},g0:0,p0k:null,ex:[],wb:null,plan:0},o||{})}
+function newProduct(o){return Object.assign({id:uid(),name:"",sku:"",qty:0,min:0,h:0,rec:{pl:[],pt:[]},g0:0,p0k:null,ex:[],wb:null,plan:0,subj:null,vol:0,autoLog:true},o||{})}
+const WBCFG_DEF={url:"",wh:"",model:"fbs",last:""};
+function normalize(d){d.p={...DEF,...(d.p||{})};if(!Array.isArray(d.log))d.log=[];d.wbcfg={...WBCFG_DEF,...(d.wbcfg||{})};if(d.wbSnap===undefined)d.wbSnap=null;d.products.forEach(p=>{if(p.subj===undefined)p.subj=null;if(!(p.vol>0))p.vol=0;if(p.autoLog===undefined)p.autoLog=true});return d}
 function migrate(sk,ce){
   const p={...DEF,...((ce&&ce.p)||{})};
   const D={v:2,p,products:[],plastics:[],parts:[],log:[]};
@@ -249,11 +268,11 @@ function migrate(sk,ce){
 }
 let storageOk=true;
 function load(){
-  try{const r=localStorage.getItem(KEY);if(r){const d=JSON.parse(r);if(valid(d)){d.p={...DEF,...(d.p||{})};if(!Array.isArray(d.log))d.log=[];return d}}}catch(e){storageOk=false}
+  try{const r=localStorage.getItem(KEY);if(r){const d=JSON.parse(r);if(valid(d))return normalize(d)}}catch(e){storageOk=false}
   let sk=null,ce=null;
   try{sk=JSON.parse(localStorage.getItem("sklad3d_v1")||"null")}catch(e){}
   try{ce=JSON.parse(localStorage.getItem("cena3d_v1")||"null")}catch(e){}
-  return migrate(sk,ce);
+  return normalize(migrate(sk,ce));
 }
 function save(){try{localStorage.setItem(KEY,JSON.stringify(S));storageOk=true}catch(e){storageOk=false;toast("Не удалось сохранить в памяти телефона")}}
 let S=load();save();
@@ -388,13 +407,21 @@ function productsHtml(){
   all.sort((a,b)=>keys[prodSort](a,b)||a.x.name.localeCompare(b.x.name,"ru"));
   const chip=(k,t)=>`<button type="button" class="chip ${prodSort===k&&!(k==="attention"&&onlyLow)?"on":""}" data-sort="${k}">${t}</button>`;
   const head=`<div class="bar"><div class="chips">${chip("attention","Остаток")}${chip("hour","₽/час")}${chip("margin","Маржа")}${chip("name","А–Я")}<button type="button" class="chip ${onlyLow?"on":""}" data-act="onlyLow">Пополнить</button></div></div>`;
-  if(!S.products.length)return kp+`<div class="empty"><b>Изделий пока нет</b>Нажмите «+», чтобы добавить первое.</div>`;
-  if(!all.length)return kp+head+`<div class="empty"><b>Ничего не найдено</b>${onlyLow?"Всё в норме.":"Попробуйте другое слово."}</div>`;
-  return kp+head+`<div class="list">${all.map(({x,r})=>{
+  const wbb=wbBarHtml();
+  if(!S.products.length)return kp+wbb+`<div class="empty"><b>Изделий пока нет</b>Нажмите «+», чтобы добавить первое.</div>`;
+  if(!all.length)return kp+wbb+head+`<div class="empty"><b>Ничего не найдено</b>${onlyLow?"Всё в норме.":"Попробуйте другое слово."}</div>`;
+  return kp+wbb+head+`<div class="list">${all.map(({x,r})=>{
     const st=state(x),w=r.w,pl=R.m[x.id],[tc]=hourTag(w?w.perH:NaN);
     const eco=w?`${n1(w.perH,0)} ₽/ч${pl?" · #"+pl:""} · маржа ${pct(w.margin)}`:x.h>0?"нет цены WB":"не указано время печати";
     return `<button type="button" class="row" data-prod="${x.id}"><span class="lead"><span class="stripe ${st}"></span></span><span class="info"><b>${esc(x.name)}</b><small>себест. ${rub(r.c.total)} · <span style="color:var(--${tc==="ok"?"ok":tc==="warn"?"warn":tc==="bad"?"bad":tc==="mid"?"accent":"muted"})">${eco}</span></small></span><span class="qty"><b>${n1(x.qty)}<small>шт</small></b><span class="tag ${st}">${STATE_TXT[st]}</span></span></button>`}).join("")}</div>
   <p class="hint">Цветная полоска — остаток на складе. ₽/ч — прибыль за час работы принтера и место среди изделий: ниже 70 ₽/ч стоит поднять цену или ускорить печать.</p>`;
+}
+
+function wbBarHtml(){
+  if(!S.wbcfg.url)return "";
+  const last=S.wbcfg.last?new Date(S.wbcfg.last):null,days=last?Math.floor((Date.now()-last)/86400000):null;
+  const noSubj=S.products.filter(p=>p.wb&&!p.subj).length;
+  return `<div class="wbbar"><div><b>Тарифы WB</b><small>${last?(days===0?"проверены сегодня":days===1?"проверены вчера":`проверены ${days} дн. назад`):"ещё не проверялись"}${noSubj?` · без предмета: ${noSubj}`:""}</small></div><button type="button" class="btn small ${days===null||days>=7?"main":""}" data-act="wbUpdate">Обновить</button></div>`;
 }
 
 /* ================= материалы ================= */
@@ -578,7 +605,9 @@ function renderProd(){
     <div id="wbBox" ${b.off?"hidden":""}>
     <div class="grid2">${F("f_pb","Цена до скидки",b.pb>0?dec(b.pb):"","₽")}${F("f_disc","Скидка продавца",pin(b.disc),"%")}</div>
     <p class="hint" id="h_price" style="margin:6px 0 10px"></p>
-    <div class="grid3">${F("f_comm","Комиссия",pin(b.comm),"%","по категории")}${F("f_ads","Реклама",pin(b.ads),"%","от цены")}${F("f_spp","СПП",pin(b.spp),"%","для справки")}${F("f_lb","Логистика база",dec(b.lb),"₽","49,3 или 54,4")}${F("f_buy","Выкуп",pin(b.buy),"%")}${F("f_acc","Платная приёмка",dec(b.acc||0),"₽")}</div>
+    <div class="field" style="margin-bottom:10px"><span>Предмет WB <small style="font-weight:500">— комиссия обновляется сама</small></span><button type="button" class="subjbtn" id="f_subj"></button></div>
+    <div class="grid3">${F("f_comm","Комиссия",pin(b.comm),"%",d.subj?"из тарифов WB":"по категории")}${F("f_ads","Реклама",pin(b.ads),"%","от цены")}${F("f_spp","СПП",pin(b.spp),"%","для справки")}${F("f_lb","Логистика база",dec(b.lb),"₽","ваша фактическая")}${F("f_buy","Выкуп",pin(b.buy),"%")}${F("f_acc","Платная приёмка",dec(b.acc||0),"₽")}</div>
+    <div class="grid2" style="margin-top:10px">${F("f_vol","Объём упаковки",d.vol>0?dec(d.vol):"","л","Д×Ш×В в см ÷ 1000")}<label class="field"><span>Логистика</span><label style="display:flex;gap:8px;align-items:center;padding:10px 0"><input type="checkbox" id="f_autolog" ${d.autoLog!==false?"checked":""}> менять вместе с тарифом WB</label></label></div>
     </div>
   </section>
   <section class="sec" id="costSec"></section>
@@ -588,8 +617,9 @@ function renderProd(){
   <div class="row2"><button type="button" class="btn main" id="e_save">${editId?"Сохранить":"Добавить изделие"}</button>${editId?`<button type="button" class="btn" id="e_dup">Копия (другой цвет)</button><button type="button" class="btn danger" id="e_del">Удалить</button>`:""}</div>`;
   window.scrollTo(0,0);
   m.oninput=e=>{if(e.target.id==="f_tm")return;readForm();markDirty();update()};
-  m.onchange=e=>{if(e.target.id==="f_on"){draft.wb.off=!e.target.checked;$("#wbBox").hidden=draft.wb.off;readForm();markDirty();update()}else if(e.target.tagName==="SELECT"){readForm();markDirty();update()}};
-  drawRec();drawEx();drawStock();
+  m.onchange=e=>{if(e.target.id==="f_autolog"){readForm();markDirty();return}if(e.target.id==="f_on"){draft.wb.off=!e.target.checked;$("#wbBox").hidden=draft.wb.off;readForm();markDirty();update()}else if(e.target.tagName==="SELECT"){readForm();markDirty();update()}};
+  drawRec();drawEx();drawStock();drawSubj();
+  $("#f_subj").onclick=()=>{readForm();openSubjPicker((sj,rate)=>{draft.subj=sj;if(rate!==null){draft.wb.comm=rate/100;const ci=$("#f_comm");if(ci)ci.value=pin(rate/100)}drawSubj();markDirty();update()})};
   $("#addPl").onclick=()=>{if(!S.plastics.length){toast("Сначала добавьте пластик во вкладке «Материалы»");return}readForm();draft.rec.pl.push({id:S.plastics[0].id,q:0});drawRec();markDirty();update()};
   $("#addPt").onclick=()=>{if(!S.parts.length){toast("Сначала добавьте детали во вкладке «Материалы»");return}readForm();draft.rec.pt.push({id:S.parts[0].id,q:0});drawRec();markDirty();update()};
   m.querySelectorAll("[data-ex]").forEach(bt=>bt.onclick=()=>{readForm();const [n,v]=bt.dataset.ex.split("|");draft.ex.push({n,v:+v});drawEx();markDirty();update()});
@@ -601,6 +631,12 @@ function renderProd(){
   update();
 }
 function markDirty(){dirty=true;$("#savebar").hidden=false}
+function drawSubj(){
+  const b=$("#f_subj");if(!b)return;const sj=draft.subj;
+  if(!sj){b.className="subjbtn";b.innerHTML=`<span><b>Выбрать предмет WB</b><small>${wbLoadCache()?"Чтобы комиссия обновлялась автоматически":"Сначала подключите тарифы WB во вкладке «Ещё»"}</small></span><span aria-hidden="true">›</span>`;return}
+  const info=wbSubj(sj.id),rate=info?wbRate(info.row):null;
+  b.className="subjbtn set";b.innerHTML=`<span><b>${esc(sj.name)}</b><small>${esc(sj.parent||"")}${rate!==null?` · сейчас ${MODEL_TXT[S.wbcfg.model]} ${n1(rate,1)}%`:""}</small></span><span style="color:var(--accent);font-weight:600;font-size:13px">Изменить</span>`;
+}
 $("#sb_save").addEventListener("click",()=>saveDraft(false));
 function drawStock(){
   const el=$("#stockSec");if(!el)return;
@@ -634,6 +670,7 @@ function readForm(){
   d.h=parseTime(v("f_h"));const g0=n("f_g0");d.g0=g0>0?g0:0;
   const pl=[],pt=[];document.querySelectorAll("#recBox .rec").forEach(r=>{const q=num(r.querySelector("input").value);(r.dataset.k==="pl"?pl:pt).push({id:r.querySelector("select").value,q:q>0?q:0})});d.rec={pl,pt};
   d.ex=[...document.querySelectorAll("#exBox .rec")].map(r=>{const ins=r.querySelectorAll("input");const val=num(ins[1].value);return {n:ins[0].value.trim(),v:val>0?val:0}});
+  const vl=n("f_vol");d.vol=vl>0?vl:0;const al=$("#f_autolog");if(al)d.autoLog=al.checked;
   const b=d.wb;b.pb=n("f_pb");b.disc=p("f_disc");b.comm=p("f_comm");b.ads=p("f_ads");b.spp=p("f_spp");b.lb=n("f_lb");b.buy=p("f_buy");b.acc=n("f_acc")||0;
   ["disc","comm","ads","spp"].forEach(k=>{if(!isFinite(b[k]))b[k]=0});if(!(b.buy>0))b.buy=S.p.buy;if(!(b.lb>0))b.lb=S.p.lb;
 }
@@ -715,6 +752,91 @@ function leaveProd(){
   });
 }
 
+/* ================= тарифы WB ================= */
+const WBC="master3d_wbcache";
+const MODEL_TXT={fbs:"FBS",dbs:"DBS",edbs:"DBS экспресс",fbw:"FBW"};
+const MODEL_COL={fbs:3,dbs:4,edbs:5,fbw:6};
+let wbCache=null;
+function wbLoadCache(){if(wbCache)return wbCache;try{wbCache=JSON.parse(localStorage.getItem(WBC)||"null")}catch(e){wbCache=null}return wbCache}
+function wbSaveCache(c){wbCache=c;try{localStorage.setItem(WBC,JSON.stringify(c))}catch(e){}}
+function wbSubj(id){const c=wbLoadCache();if(!c)return null;const r=c.subjects.find(x=>x[0]===id);return r?{id:r[0],name:r[1],parent:r[2],row:r}:null}
+function wbRate(row,model){const v=row[MODEL_COL[model||S.wbcfg.model]];return v===null||v===""||v===undefined?null:+v}
+function wbWarehouse(c,name){c=c||wbLoadCache();if(!c||!c.warehouses||!c.warehouses.length)return null;
+  return c.warehouses.find(w=>w.name===name)||c.warehouses.find(w=>/маркетплейс/i.test(w.name))||c.warehouses[0]}
+function wbT(w,vol,model){if(!w)return NaN;const fb=(model||S.wbcfg.model)==="fbw";const b1=fb?w.fbw1:w.fbs1,bl=fb?w.fbwL:w.fbsL;if(!(b1>0))return NaN;return b1+(bl>0?bl:0)*Math.max(0,(vol>0?vol:1)-1)}
+async function wbFetch(){
+  const url=(S.wbcfg.url||"").trim();
+  if(!/^https:\/\/script\.google(usercontent)?\.com\//.test(url))throw new Error("Вставьте адрес веб-приложения из Google (начинается с https://script.google.com/…/exec)");
+  const ids=[...new Set(S.products.filter(p=>p.subj).map(p=>p.subj.id))].join(",");
+  const q=`?model=${encodeURIComponent(S.wbcfg.model)}&wh=${encodeURIComponent(S.wbcfg.wh||"")}${ids?"&track="+ids:""}`;
+  let res;
+  try{res=await fetch(url+q,{method:"GET",redirect:"follow"})}catch(e){throw new Error("Нет связи со скриптом. Проверьте интернет и что веб-приложение открыто для «Все».")}
+  let d;try{d=await res.json()}catch(e){throw new Error("Скрипт ответил не данными. Проверьте, что в развертывании выбрано «Веб-приложение» и доступ «Все».")}
+  if(!d||!d.ok)throw new Error(d&&d.error?d.error:"Скрипт вернул ошибку");
+  const c={updated:d.updated||"",fetched:Date.now(),subjects:d.subjects||[],warehouses:d.warehouses||[]};
+  wbSaveCache(c);
+  if(!S.wbcfg.wh){const w=wbWarehouse(c,"");if(w)S.wbcfg.wh=w.name}
+  return c;
+}
+function wbPropose(c){
+  const out=[],cur=wbWarehouse(c,S.wbcfg.wh),snap=S.wbSnap;
+  const logOk=!!(snap&&cur&&snap.name===cur.name&&snap.model===S.wbcfg.model);
+  for(const p of S.products){
+    if(!p.wb)continue;const ch={p,before:calc(p)};
+    if(p.subj){const r=c.subjects.find(x=>x[0]===p.subj.id);if(r){const v=wbRate(r);if(v!==null&&Math.abs(v/100-p.wb.comm)>1e-9)ch.comm=[p.wb.comm,v/100]}else ch.lost=true}
+    if(logOk&&p.autoLog!==false){const o=wbT(snap,p.vol),n=wbT(cur,p.vol);if(o>0&&n>0&&Math.abs(n-o)>1e-9){const lb=p.wb.lb>0?p.wb.lb:S.p.lb;ch.lb=[lb,Math.round(lb*n/o*100)/100]}}
+    if(ch.comm||ch.lb){const t=JSON.parse(JSON.stringify(p));if(ch.comm)t.wb.comm=ch.comm[1];if(ch.lb)t.wb.lb=ch.lb[1];ch.after=calc(t);out.push(ch)}
+  }
+  return {list:out,cur,logOk,first:!snap||!cur||snap.name!==cur.name||snap.model!==S.wbcfg.model};
+}
+function wbApply(pr){
+  for(const ch of pr.list){if(ch.comm)ch.p.wb.comm=ch.comm[1];if(ch.lb)ch.p.wb.lb=ch.lb[1]}
+  if(pr.cur)S.wbSnap={name:pr.cur.name,model:S.wbcfg.model,fbs1:pr.cur.fbs1,fbsL:pr.cur.fbsL,fbw1:pr.cur.fbw1,fbwL:pr.cur.fbwL,date:Date.now()};
+  S.wbcfg.last=new Date().toISOString();
+  if(pr.list.length)S.log.unshift({id:uid(),t:Date.now(),text:`Тарифы WB: обновлено изделий — ${pr.list.length}`,changes:[],isUndo:true,
+    note:pr.list.map(ch=>ch.p.name+": "+[ch.comm?`комиссия ${pct(ch.comm[0])} → ${pct(ch.comm[1])}`:"",ch.lb?`логистика ${n1(ch.lb[0],2)} → ${n1(ch.lb[1],2)} ₽`:""].filter(Boolean).join(", ")).join("; ")});
+  save();
+}
+async function wbUpdate(btn){
+  if(btn){btn.disabled=true;btn.textContent="Загружаю…"}
+  let c;
+  try{c=await wbFetch()}catch(e){if(btn){btn.disabled=false;btn.textContent="Обновить"}openSheet(`<h2>Не удалось обновить тарифы</h2><p class="sub" style="margin:0">${esc(e.message)}</p><div class="row2"><button type="button" class="btn" id="w_ok">Понятно</button></div>`,s=>s.querySelector("#w_ok").onclick=closeSheet);return}
+  save();
+  const pr=wbPropose(c);
+  const noSubj=S.products.filter(p=>p.wb&&!p.subj).length;
+  const upd=c.updated?new Date(c.updated).toLocaleDateString("ru-RU",{day:"numeric",month:"long"}):"—";
+  const w=pr.cur;
+  const head=`<p class="sub" style="margin:0">Данные WB от ${esc(upd)}. ${w?`Логистика: ${esc(w.name)}, 1-й литр ${n1(S.wbcfg.model==="fbw"?w.fbw1:w.fbs1,2)} ₽.`:""}</p>`;
+  const foot=`${pr.first&&w?`<p class="hint">Тариф логистики запомнен. Со следующего обновления ваша логистика будет меняться на столько же процентов, на сколько изменится тариф WB.</p>`:""}${noSubj?`<p class="hint">У ${noSubj} изд. не выбран «Предмет WB» — их комиссия не обновляется. Откройте изделие → блок Wildberries.</p>`:""}`;
+  if(!pr.list.length){wbApply(pr);renderMain();openSheet(`<h2>Тарифы не изменились</h2>${head}${foot}<div class="row2"><button type="button" class="btn main" id="w_ok">Хорошо</button></div>`,s=>s.querySelector("#w_ok").onclick=closeSheet);return}
+  const rows=pr.list.map(ch=>{const b=ch.before.w,a=ch.after.w;return `<div class="chg"><b>${esc(ch.p.name)}</b>
+    ${ch.comm?`<div class="ln"><span>Комиссия</span><span>${pct(ch.comm[0])} → <b>${pct(ch.comm[1])}</b></span></div>`:""}
+    ${ch.lb?`<div class="ln"><span>Логистика база</span><span>${n1(ch.lb[0],2)} → <b>${n1(ch.lb[1],2)} ₽</b></span></div>`:""}
+    ${b&&a?`<div class="ln"><span>Прибыль / шт</span><span>${rub(b.Q)} → <b class="${a.Q<b.Q?"minus":"plus"}">${rub(a.Q)}</b></span></div>`:""}</div>`}).join("");
+  openSheet(`<h2>Изменились тарифы WB</h2>${head}<div>${rows}</div>${foot}<div class="row2"><button type="button" class="btn main" id="w_ok">Применить</button><button type="button" class="btn" id="w_no">Не сейчас</button></div>`,s=>{
+    s.querySelector("#w_no").onclick=closeSheet;
+    s.querySelector("#w_ok").onclick=()=>{wbApply(pr);closeSheet();render();toast("Тарифы применены, цены пересчитаны")};
+  });
+  if(btn){btn.disabled=false;btn.textContent="Обновить"}
+}
+function openSubjPicker(onPick){
+  const c=wbLoadCache();
+  if(!c||!c.subjects.length){openSheet(`<h2>Список предметов WB не загружен</h2><p class="sub" style="margin:0">Подключите тарифы WB: вкладка «Ещё» → «Тарифы WB». Пока можно ввести комиссию вручную.</p><div class="row2"><button type="button" class="btn" id="w_ok">Понятно</button></div>`,s=>s.querySelector("#w_ok").onclick=closeSheet);return}
+  const guess=(draft&&draft.name||"").split(/[\s(]/)[0].slice(0,6);
+  openSheet(`<h2>Предмет WB</h2><p class="sub">Как в карточке товара в кабинете WB. Комиссия ${MODEL_TXT[S.wbcfg.model]} — справа.</p>
+   <input id="sp_q" class="search" type="search" placeholder="Например: пуговицы, полки, держатели" value="${esc(guess)}" autocomplete="off" autofocus>
+   <div class="subjlist" id="sp_list"></div>`,s=>{
+    const q=s.querySelector("#sp_q"),list=s.querySelector("#sp_list");
+    const draw=()=>{const t=q.value.trim().toLowerCase().replace(/ё/g,"е");
+      let rows=c.subjects;if(t)rows=rows.filter(r=>(r[1]+" "+r[2]).toLowerCase().replace(/ё/g,"е").includes(t));
+      const shown=rows.slice(0,60);
+      list.innerHTML=shown.length?shown.map(r=>{const v=wbRate(r);return `<button type="button" data-id="${r[0]}"><span><b>${esc(r[1])}</b><small>${esc(r[2])}</small></span><b class="pc">${v===null?"—":n1(v,1)+"%"}</b></button>`}).join("")+(rows.length>60?`<p class="hint" style="padding:8px 12px">Показаны 60 из ${rows.length}. Уточните поиск.</p>`:""):`<p class="hint" style="padding:12px">Ничего не найдено. Попробуйте другое слово.</p>`;
+      list.querySelectorAll("button[data-id]").forEach(b=>b.onclick=()=>{const r=c.subjects.find(x=>x[0]===+b.dataset.id);closeSheet();onPick({id:r[0],name:r[1],parent:r[2]},wbRate(r))});
+    };
+    q.addEventListener("input",draw);draw();
+  });
+}
+
 /* ================= журнал ================= */
 function logHtml(){
   if(!S.log.length)return `<div class="empty"><b>Журнал пуст</b>Здесь появится каждая операция: печать, отгрузка, приход. Любую можно отменить.</div>`;
@@ -760,7 +882,16 @@ const PDEF=[["Себестоимость",[["ppk","Пластик по умол�
  ["Принтер и опт",[["load","Загрузка принтера","% времени",100],["optTax","Налог при опте ИП/юрлицу","%",100],["partnerProfit","Прибыль партнёра","%",100],["partnerTax","Налог партнёра","%",100]]]];
 function moreHtml(){
   const last=(()=>{try{return localStorage.getItem("master3d_lastbackup")}catch(e){return null}})();
-  return `<div class="card"><h2>Резервная копия</h2><p>Всё хранится только в этом телефоне. Раз в неделю сохраняйте копию в файл и отправляйте себе в Telegram.</p><p>${last?"Последняя копия: "+esc(new Date(+last).toLocaleString("ru-RU")):"Копию ещё не делали."}</p>
+  const wc=wbLoadCache(),cfg=S.wbcfg;
+  const whs=wc&&wc.warehouses?wc.warehouses:[],curW=wbWarehouse(wc,cfg.wh);
+  const wbCard=`<div class="card"><h2>Тарифы WB</h2>
+   <p>Комиссии и логистику раз в неделю забирает ваш скрипт в Google Таблице. Он же пишет письмо, если что-то изменилось. Как настроить — в инструкции, шаги 1–4.</p>
+   <label class="field"><span>Адрес веб-приложения Google</span><input id="wb_url" class="inp" type="url" inputmode="url" placeholder="https://script.google.com/macros/s/…/exec" value="${esc(cfg.url)}"></label>
+   ${wc?`<p>Связь есть: ${n1(wc.subjects.length,0)} предметов, данные от ${esc(wc.updated?new Date(wc.updated).toLocaleString("ru-RU"):"—")}.</p>`:""}
+   ${whs.length?`<div class="grid2"><label class="field"><span>Склад для логистики</span><select id="wb_wh" class="inp">${whs.map(w=>`<option value="${esc(w.name)}" ${curW&&w.name===curW.name?"selected":""}>${esc(w.name)} — ${n1(cfg.model==="fbw"?w.fbw1:w.fbs1,1)} ₽</option>`).join("")}</select><small>FBS: строка «Маркетплейс» вашего региона</small></label>
+   <label class="field"><span>Схема продаж</span><select id="wb_model" class="inp">${Object.keys(MODEL_TXT).map(k=>`<option value="${k}" ${cfg.model===k?"selected":""}>${MODEL_TXT[k]}</option>`).join("")}</select><small>какую комиссию брать</small></label></div>`:""}
+   <div class="row2"><button class="btn main" type="button" data-act="wbConnect">${wc?"Обновить тарифы":"Подключить"}</button>${cfg.url?`<button class="btn ghost" type="button" data-act="wbOff">Отключить</button>`:""}</div></div>`;
+  return wbCard+`<div class="card"><h2>Резервная копия</h2><p>Всё хранится только в этом телефоне. Раз в неделю сохраняйте копию в файл и отправляйте себе в Telegram.</p><p>${last?"Последняя копия: "+esc(new Date(+last).toLocaleString("ru-RU")):"Копию ещё не делали."}</p>
    <div class="row2"><button class="btn main" type="button" data-act="exportJson">Сохранить копию в файл</button><button class="btn" type="button" data-act="copyJson">Скопировать как текст</button></div></div>
   <div class="card"><h2>Загрузить копию</h2><p>Подходят копии этого приложения и старых «Склад 3D» и «Цена 3D». Две старые копии можно загрузить по очереди — они объединятся.</p>
    <label class="btn" for="fileIn">Выбрать файл .json</label><input id="fileIn" type="file" accept=".json,application/json,text/plain" hidden>
@@ -786,7 +917,7 @@ function csv(sep){
 let pend={sk:null,ce:null};
 function handleImport(text){
   let d;try{d=JSON.parse(text)}catch(e){toast("Это не файл копии");return}
-  if(valid(d)){confirmSheet("Загрузить копию?",`В копии ${d.products.length} изделий, ${d.plastics.length} пластиков, ${d.parts.length} деталей. Текущие данные заменятся.`,"Заменить",()=>{d.p={...DEF,...(d.p||{})};if(!Array.isArray(d.log))d.log=[];S=d;save();view="products";render();toast("Копия загружена")});return}
+  if(valid(d)){confirmSheet("Загрузить копию?",`В копии ${d.products.length} изделий, ${d.plastics.length} пластиков, ${d.parts.length} деталей. Текущие данные заменятся.`,"Заменить",()=>{S=normalize(d);save();view="products";render();toast("Копия загружена")});return}
   if(d&&Array.isArray(d.items))pend.ce=d;
   else if(d&&Array.isArray(d.products)&&Array.isArray(d.plastics))pend.sk=d;
   else{toast("В файле нет данных мастерской");return}
@@ -818,6 +949,9 @@ $("#main").addEventListener("click",e=>{
   const mt=e.target.closest("[data-mat]");if(mt){matTab=mt.dataset.mat;onlyLow=false;render();return}
   const a=e.target.closest("[data-act]");if(!a)return;const act=a.dataset.act;
   if(act==="hideNotice"){delete S.notice;save();renderMain()}
+  if(act==="wbUpdate")wbUpdate(a);
+  if(act==="wbConnect"){const u=$("#wb_url").value.trim();if(u!==S.wbcfg.url){S.wbcfg.url=u;save()}if(!u){toast("Вставьте адрес веб-приложения");return}a.disabled=true;a.textContent="Подключаю…";wbUpdate(null).then(()=>{if(view==="more")renderMain()})}
+  if(act==="wbOff")confirmSheet("Отключить тарифы WB?","Автообновление в приложении выключится. Предметы у изделий сохранятся, скрипт в Google продолжит присылать письма.","Отключить",()=>{S.wbcfg={...WBCFG_DEF};S.wbSnap=null;wbSaveCache(null);try{localStorage.removeItem(WBC)}catch(e){}save();renderMain();toast("Отключено")});
   if(act==="onlyLow"){onlyLow=!onlyLow;renderMain()}
   if(act==="allMat"){onlyLow=false;renderMain()}
   if(act==="exportJson"){download(`masterskaya-${stamp()}.json`,JSON.stringify(S),"application/json");markBackup();toast("Файл сохранён в «Загрузки»");renderMain()}
@@ -825,11 +959,14 @@ $("#main").addEventListener("click",e=>{
   if(act==="exportCsv"){download(`masterskaya-${stamp()}.csv`,csv(";"),"text/csv");toast("Таблица сохранена в «Загрузки»")}
   if(act==="copyCsv")copy(csv("\t"),"Таблица скопирована. Вставьте её в Excel");
   if(act==="pasteImport"){const t=$("#pasteIn").value.trim();t?handleImport(t):toast("Сначала вставьте текст копии")}
-  if(act==="doMigrate")confirmSheet("Перенести данные?","Текущие данные приложения заменятся данными из старых копий.","Перенести",()=>{S=migrate(pend.sk,pend.ce);pend={sk:null,ce:null};save();view="products";render();toast("Данные перенесены")},false);
+  if(act==="doMigrate")confirmSheet("Перенести данные?","Текущие данные приложения заменятся данными из старых копий.","Перенести",()=>{S=normalize(migrate(pend.sk,pend.ce));pend={sk:null,ce:null};save();view="products";render();toast("Данные перенесены")},false);
   if(act==="resetP")confirmSheet("Вернуть параметры?","Все параметры станут как в вашей таблице.","Вернуть",()=>{S.p={...DEF};save();renderMain();toast("Параметры восстановлены")});
-  if(act==="wipe")confirmSheet("Очистить всё?","Удалятся изделия, материалы и журнал. Вернуть можно только из копии.","Очистить",()=>{S={v:2,p:S.p,products:[],plastics:[],parts:[],log:[]};save();view="products";render();toast("Очищено")});
+  if(act==="wipe")confirmSheet("Очистить всё?","Удалятся изделия, материалы и журнал. Вернуть можно только из копии.","Очистить",()=>{S=normalize({v:2,p:S.p,wbcfg:S.wbcfg,products:[],plastics:[],parts:[],log:[]});S.wbSnap=null;save();view="products";render();toast("Очищено")});
 });
 $("#main").addEventListener("change",e=>{
+  if(e.target.id==="wb_url"){S.wbcfg.url=e.target.value.trim();save()}
+  if(e.target.id==="wb_wh"){S.wbcfg.wh=e.target.value;save();toast("Склад выбран. Тариф запомнится при следующем обновлении")}
+  if(e.target.id==="wb_model"){S.wbcfg.model=e.target.value;save();renderMain();toast("Схема изменена")}
   if(e.target.id==="fileIn"){const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>handleImport(String(r.result));r.readAsText(f);e.target.value=""}
   if(e.target.dataset&&e.target.dataset.p){const v=num(e.target.value);if(isFinite(v)&&v>=0){S.p[e.target.dataset.p]=v/(+e.target.dataset.m);save();toast("Сохранено, всё пересчитано")}else{toast("Введите число");e.target.value=String(Math.round(S.p[e.target.dataset.p]*e.target.dataset.m*1000)/1000).replace(".",",")}}
 });
@@ -838,7 +975,7 @@ $("#main").addEventListener("input",e=>{
 });
 let tt;function toast(m){const t=$("#toast");t.textContent=m;t.hidden=false;clearTimeout(tt);tt=setTimeout(()=>t.hidden=true,2600)}
 
-window.__m={calc,S:()=>S,migrate,wholesale};
+window.__m={calc,S:()=>S,migrate,wholesale,wbPropose,wbT};
 render();
 })();
 </script>
